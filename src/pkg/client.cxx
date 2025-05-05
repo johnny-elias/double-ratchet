@@ -1,20 +1,33 @@
-#include "pkg/client.hpp"
-#include "include-shared/util.hpp" // For print_bytes etc.
+#include "../../include/pkg/client.hpp"
+#include "../../include-shared/util.hpp" // For print_bytes etc.
+#include "../../include-shared/constants.hpp"
+#include "../../include-shared/logger.hpp"
 
 #include <chrono> // For sleep_for
 #include <future> // For std::async, std::future
 #include <stdexcept>
 #include <cryptopp/osrng.h> // For AutoSeededRandomPool
 
+/*
+Syntax to use logger:
+  CUSTOM_LOG(lg, debug) << "your message"
+See logger.hpp for more modes besides 'debug'
+*/
 
-Client::Client(std::unique_ptr<CLIDriver> cli_driver,
-               std::unique_ptr<CryptoDriver> crypto_driver,
-               std::unique_ptr<NetworkDriver> network_driver)
-    : cli_driver(std::move(cli_driver)),
-      crypto_driver(std::move(crypto_driver)),
-      network_driver(std::move(network_driver)),
-      running(false), logger("ClientLog.txt"), dr_initialized(false),
-      initial_key_exchanged(false), Ns(0), Nr(0), PN(0) {}
+/**
+ * Constructor. Sets up TCP socket and starts REPL
+ * @param network_driver NetworkDriver to handle network operations i.e. sending and receiving msgs 
+ * @param crypto_driver CryptoDriver to handle crypto related functionality
+ * @param cli_driver CryptoDriver to handle crypto related functionality
+ */
+Client::Client(std::shared_ptr<CryptoDriver> crypto_driver,
+               std::shared_ptr<NetworkDriver> network_driver) {
+    this->cli_driver = std::make_shared<CLIDriver>();
+    this->crypto_driver = crypto_driver;
+    this->network_driver = network_driver;
+    initLogger(logging::trivial::severity_level::trace);
+    logger.log("Client initialized.");
+}
 
 Client::~Client() {
   stop(); // Ensure stop is called to join threads
@@ -23,19 +36,16 @@ Client::~Client() {
 
 // Simplified initial key setup - This needs careful review based on your exact handshake.
 // Assumes a simple DH exchange happens before DR starts.
-void Client::prepare_keys(bool is_initiator, const std::optional<std::string>& remote_addr) {
+void Client:: prepare_keys(bool is_initiator, std::string& remote_addr) {
     logger.log("Initializing CryptoDriver and generating initial DH keys...");
     crypto_driver->DH_initialize(); // Generate initial identity key pair
     DHPublicKey my_initial_pub_key = crypto_driver->get_dh_public_key();
-    logger.log("My initial public key generated: " + Util::byteblock_to_hex(my_initial_pub_key));
+    logger.log("My initial public key generated: " + byteblock_to_string(my_initial_pub_key));
 
 
     if (is_initiator) {
         logger.log("Running as initiator. Waiting for connection and remote key...");
-        if (!remote_addr) {
-            throw std::runtime_error("Initiator requires remote address");
-        }
-        network_driver->connect(*remote_addr, std::to_string(DEFAULT_SERVER_PORT)); // Ensure port is correct
+        network_driver->connect(remote_addr, DEFAULT_SERVER_PORT); // TODO: configure port, type int 
 
         // Initiator (Alice) waits for Bob's initial key exchange message
         // This loop assumes the first message received *must* be a KeyExchange
@@ -110,7 +120,7 @@ void Client::HandleKeyExchange(const Message_KeyExchange &msg) {
     logger.log("Handling KeyExchange message...");
     // Store the received public key (this is the OTHER party's initial identity/ratchet key)
     DHPublicKey initial_remote_pub_key = msg.pub_val; // In simplified scheme, this is both identity and first ratchet key
-    logger.log("Received initial remote public key: " + Util::byteblock_to_hex(initial_remote_pub_key));
+    logger.log("Received initial remote public key: " + byteblock_to_string(initial_remote_pub_key));
 
     // Generate the initial shared secret using our *ratchet* private key and their public key
     // In this simplified setup, the initial DH key pair IS the first ratchet key pair
@@ -136,7 +146,7 @@ void Client::HandleKeyExchange(const Message_KeyExchange &msg) {
     initial_shared_secret = crypto_driver->DH_generate_shared_secret(temp_priv, initial_remote_pub_key);
 
 
-    logger.log("Calculated initial shared secret: " + Util::byteblock_to_hex(initial_shared_secret));
+    logger.log("Calculated initial shared secret: " + byteblock_to_string(initial_shared_secret));
 
 
     // --- Initialize Double Ratchet State ---
@@ -184,10 +194,10 @@ void Client::RatchetInitAlice(const CryptoPP::SecByteBlock& SK, const DHPublicKe
     this->PN = 0;
     this->MKskipped.clear();
      logger.log("RatchetInitAlice completed. RK and CKs derived.");
-     logger.log("RK: " + Util::byteblock_to_hex(RK));
-     logger.log("CKs: " + Util::byteblock_to_hex(CKs));
-     logger.log("DHs_pub: " + Util::byteblock_to_hex(DHs_pub));
-     logger.log("DHr_pub: " + Util::byteblock_to_hex(DHr_pub));
+     logger.log("RK: " + byteblock_to_string(RK));
+     logger.log("CKs: " + byteblock_to_string(CKs));
+     logger.log("DHs_pub: " + byteblock_to_string(DHs_pub));
+     logger.log("DHr_pub: " + byteblock_to_string(DHr_pub));
 
 }
 
@@ -205,8 +215,8 @@ void Client::RatchetInitBob(const CryptoPP::SecByteBlock& SK, const CryptoPP::Se
     this->PN = 0;
     this->MKskipped.clear();
     logger.log("RatchetInitBob completed. RK set.");
-    logger.log("RK: " + Util::byteblock_to_hex(RK));
-    logger.log("DHs_pub: " + Util::byteblock_to_hex(DHs_pub));
+    logger.log("RK: " + byteblock_to_string(RK));
+    logger.log("DHs_pub: " + byteblock_to_string(DHs_pub));
 }
 
 
@@ -227,8 +237,8 @@ std::optional<Message_Message> Client::RatchetEncrypt(const std::string& plainte
     try {
         // Advance sending chain key and get message key
         std::tie(CKs, MK) = crypto_driver->KDF_CK(CKs);
-         logger.log("Advanced CKs: " + Util::byteblock_to_hex(CKs));
-         logger.log("Derived MK for Ns=" + std::to_string(Ns) + ": " + Util::byteblock_to_hex(MK));
+         logger.log("Advanced CKs: " + byteblock_to_string(CKs));
+         logger.log("Derived MK for Ns=" + std::to_string(Ns) + ": " + byteblock_to_string(MK));
 
     } catch (const std::exception& e) {
          logger.log("Error during KDF_CK for sending: " + std::string(e.what()));
@@ -241,7 +251,7 @@ std::optional<Message_Message> Client::RatchetEncrypt(const std::string& plainte
     msg.header.n = Ns;
 
     std::string associated_data = msg.get_serialized_header();
-     logger.log("Encrypting with AD: " + Util::string_to_hex(associated_data));
+    logger.log("Encrypting with AD: " + associated_data);
 
 
     try {
@@ -253,7 +263,7 @@ std::optional<Message_Message> Client::RatchetEncrypt(const std::string& plainte
         // Generate MAC (must include AD)
         msg.mac = crypto_driver->HMAC_generate(MK, iv, ciphertext, associated_data);
 
-         logger.log("Encryption successful. IV: " + Util::byteblock_to_hex(iv) + ", CT size: " + std::to_string(ciphertext.size()) + ", MAC: " + Util::byteblock_to_hex(msg.mac));
+         logger.log("Encryption successful. IV: " + byteblock_to_string(iv) + ", CT size: " + std::to_string(ciphertext.size()) + ", MAC: " + byteblock_to_string(msg.mac));
 
     } catch (const std::exception& e) {
         logger.log("Error during encryption/MAC generation: " + std::string(e.what()));
@@ -276,12 +286,12 @@ std::optional<std::string> Client::RatchetDecrypt(const Message_Message& msg) {
         return std::nullopt;
     }
 
-    logger.log("RatchetDecrypt received msg: DHr=" + Util::byteblock_to_hex(msg.header.dh_pub) + ", N=" + std::to_string(msg.header.n) + ", PN=" + std::to_string(msg.header.pn));
+    logger.log("RatchetDecrypt received msg: DHr=" + byteblock_to_string(msg.header.dh_pub) + ", N=" + std::to_string(msg.header.n) + ", PN=" + std::to_string(msg.header.pn));
 
 
     // Get Associated Data from the received message header
     std::string associated_data = msg.get_serialized_header();
-     logger.log("Decrypting with AD: " + Util::string_to_hex(associated_data));
+     logger.log("Decrypting with AD: " + associated_data);
 
 
     // 1. Try skipped message keys first
@@ -317,8 +327,8 @@ std::optional<std::string> Client::RatchetDecrypt(const Message_Message& msg) {
     // 2. Check for DH Ratchet step (new remote public key)
     if (msg.header.dh_pub != DHr_pub) {
         logger.log("New remote DH public key received. Performing DH Ratchet step.");
-        logger.log("Old DHr_pub: " + Util::byteblock_to_hex(DHr_pub));
-        logger.log("New DHr_pub: " + Util::byteblock_to_hex(msg.header.dh_pub));
+        logger.log("Old DHr_pub: " + byteblock_to_string(DHr_pub));
+        logger.log("New DHr_pub: " + byteblock_to_string(msg.header.dh_pub));
 
         // Before performing the step, try to process skipped messages belonging to the *old* CKr chain
         // This part is tricky - how do we know which chain the skipped messages belong to?
@@ -368,7 +378,7 @@ std::optional<std::string> Client::RatchetDecrypt(const Message_Message& msg) {
             // Store the skipped key
             SkippedMessageKeyId skipped_key_id{DHr_pub, Nr}; // Use current DHr_pub for this chain
             MKskipped[skipped_key_id] = skipped_MK;
-             logger.log("Derived and stored skipped MK for Nr=" + std::to_string(Nr) + " under PK " + Util::byteblock_to_hex(DHr_pub) + ": " + Util::byteblock_to_hex(skipped_MK));
+             logger.log("Derived and stored skipped MK for Nr=" + std::to_string(Nr) + " under PK " + byteblock_to_string(DHr_pub) + ": " + byteblock_to_string(skipped_MK));
 
 
             Nr++;
@@ -388,8 +398,8 @@ std::optional<std::string> Client::RatchetDecrypt(const Message_Message& msg) {
             std::tie(CKr, MK) = crypto_driver->KDF_CK(CKr); // Advance one last time for this message
             Nr++; // Increment Nr *after* successful processing of message N
 
-             logger.log("Advanced CKr: " + Util::byteblock_to_hex(CKr));
-             logger.log("Derived MK for N=" + std::to_string(msg.header.n) + ": " + Util::byteblock_to_hex(MK));
+             logger.log("Advanced CKr: " + byteblock_to_string(CKr));
+             logger.log("Derived MK for N=" + std::to_string(msg.header.n) + ": " + byteblock_to_string(MK));
 
 
             // Verify MAC first!
@@ -433,23 +443,23 @@ void Client::DoDH RatchetStep(const DHPublicKey& received_dh_pub) {
     Nr = 0;    // Reset receiving message number
 
     DHr_pub = received_dh_pub; // Update remote public key
-     logger.log("Updated DHr_pub: " + Util::byteblock_to_hex(DHr_pub));
+     logger.log("Updated DHr_pub: " + byteblock_to_string(DHr_pub));
 
 
     // Calculate first DH output using OLD sending key pair and NEW remote key
     CryptoPP::SecByteBlock dh_output1 = crypto_driver->DH_generate_shared_secret(DHs_priv, DHr_pub);
     std::tie(RK, CKr) = crypto_driver->KDF_RK(RK, dh_output1); // Update RK, derive NEW receiving chain key
-     logger.log("Step 1 KDF_RK -> New RK: " + Util::byteblock_to_hex(RK) + ", New CKr: " + Util::byteblock_to_hex(CKr));
+     logger.log("Step 1 KDF_RK -> New RK: " + byteblock_to_string(RK) + ", New CKr: " + byteblock_to_string(CKr));
 
 
     // Generate NEW sending key pair
     crypto_driver->DH_generate_ratchet_keypair(DHs_priv, DHs_pub);
-     logger.log("Generated new DHs pair. Pub: " + Util::byteblock_to_hex(DHs_pub));
+     logger.log("Generated new DHs pair. Pub: " + byteblock_to_string(DHs_pub));
 
     // Calculate second DH output using NEW sending key pair and NEW remote key
     CryptoPP::SecByteBlock dh_output2 = crypto_driver->DH_generate_shared_secret(DHs_priv, DHr_pub);
     std::tie(RK, CKs) = crypto_driver->KDF_RK(RK, dh_output2); // Update RK again, derive NEW sending chain key
-     logger.log("Step 2 KDF_RK -> New RK: " + Util::byteblock_to_hex(RK) + ", New CKs: " + Util::byteblock_to_hex(CKs));
+     logger.log("Step 2 KDF_RK -> New RK: " + byteblock_to_string(RK) + ", New CKs: " + byteblock_to_string(CKs));
 
 
     // Clear skipped message keys (associated with old chains)
@@ -464,7 +474,7 @@ void Client::DoDH RatchetStep(const DHPublicKey& received_dh_pub) {
 // Tries to process skipped messages (Placeholder - complex logic)
 void Client::TrySkippedMessageKeys(const DHPublicKey& pk_to_check, uint32_t up_to_n, const Message_Message& original_msg) {
      // Assumes lock is already held by caller (RatchetDecrypt)
-    logger.log("TrySkippedMessageKeys called for PK " + Util::byteblock_to_hex(pk_to_check) + " up to N=" + std::to_string(up_to_n));
+    logger.log("TrySkippedMessageKeys called for PK " + byteblock_to_string(pk_to_check) + " up to N=" + std::to_string(up_to_n));
 
     // Iterate through MKskipped and find keys matching pk_to_check
     // This requires careful implementation to avoid modifying map while iterating etc.
@@ -479,7 +489,7 @@ void Client::TrySkippedMessageKeys(const DHPublicKey& pk_to_check, uint32_t up_t
             // If you *did* store the full skipped messages, you would try decrypting here.
 
             // For now, just log and remove (as if processed, though we didn't decrypt)
-            logger.log("Removing skipped key for PK " + Util::byteblock_to_hex(id.pk) + ", N=" + std::to_string(id.n) + " during DH ratchet transition (assuming processed/stale).");
+            logger.log("Removing skipped key for PK " + byteblock_to_string(id.pk) + ", N=" + std::to_string(id.n) + " during DH ratchet transition (assuming processed/stale).");
             it = MKskipped.erase(it); // Erase and get iterator to next element
         } else {
             ++it; // Move to next element
@@ -524,7 +534,7 @@ void Client::network_loop() {
     if (!running) break; // Check after blocking call
 
     if (received && !data.empty()) {
-        logger.log("Received raw data (" + std::to_string(data.length()) + " bytes): " + Util::string_to_hex(data));
+        logger.log("Received raw data (" + std::to_string(data.length()) + " bytes): " + data);
          // Determine message type and deserialize (basic version)
          try {
              // Assume type byte prefix

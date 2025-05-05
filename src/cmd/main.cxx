@@ -38,8 +38,7 @@ int main(int argc, char *argv[]) {
   } else {
     throw std::runtime_error("Error: got invalid client command.");
   }
-  std::shared_ptr<CryptoDriver> crypto_driver =
-      std::make_shared<CryptoDriver>();
+  std::shared_ptr<CryptoDriver> crypto_driver = std::make_shared<CryptoDriver>();
 
   // Create client then run network, crypto, and cli.
   Client client = Client(network_driver, crypto_driver);
