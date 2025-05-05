@@ -53,6 +53,7 @@ private:
 
   // State
   std::atomic<bool> running;
+  src::severity_logger<logging::trivial::severity_level> lg; // Logger instance
   std::mutex mtx; // Mutex for protecting shared state (like DR state)
 
   // Message Queues

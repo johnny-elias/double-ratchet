@@ -202,6 +202,8 @@ CryptoDriver::AES_encrypt(const MessageKey &key, const std::string &plaintext, c
     return {iv, ciphertext};
 }
 
+// TODO: instead of using optional, throw an error if decryption fails 
+
 // AES Decryption (Using CBC mode)
 std::optional<std::string> CryptoDriver::AES_decrypt(const MessageKey &key,
                                        const CryptoPP::SecByteBlock &iv,

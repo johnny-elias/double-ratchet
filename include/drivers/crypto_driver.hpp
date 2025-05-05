@@ -26,7 +26,6 @@ const CryptoPP::byte KDF_RK_INFO[] = {0x01, 'R', 'K'}; // Example info for Root 
 const CryptoPP::byte KDF_CK_INFO[] = {0x02, 'C', 'K'}; // Example info for Chain Key KDF
 const CryptoPP::byte KDF_MK_INFO[] = {0x03, 'M', 'K'}; // Example info for Message Key KDF
 
-
 // Using SHA256 for HMAC and HKDF typically
 using HASH = CryptoPP::SHA256;
 using HMAC_DR = CryptoPP::HMAC<HASH>;
@@ -35,11 +34,12 @@ const unsigned int HASH_SIZE = HASH::DIGESTSIZE; // 32 bytes for SHA256
 
 
 class CryptoDriver {
+public: 
   CryptoPP::DH dh;
   CryptoPP::AutoSeededRandomPool prng;
   CryptoPP::SecByteBlock dh_priv_key;
   CryptoPP::SecByteBlock dh_pub_key;
-
+  
   // --- Key Derivation Function (HKDF based) ---
   // HKDF<HASH> kdf; // Can instantiate HKDF if needed directly
 
@@ -58,8 +58,6 @@ class CryptoDriver {
   // Derives next Chain Key (CK) and Message Key (MK) from current CK
   std::pair<ChainKey, MessageKey> KDF_CK(const ChainKey& ck);
 
-
-public:
   CryptoDriver(); // Constructor initializes DH domain
 
   // --- DH Key Management ---
@@ -88,10 +86,10 @@ public:
   AES_encrypt(const MessageKey &key, const std::string &plaintext, const std::string& associated_data);
 
   // AES Decryption
-  std::optional<std::string> AES_decrypt(const MessageKey &key,
-                                       const CryptoPP::SecByteBlock &iv,
-                                       const CryptoPP::SecByteBlock &ciphertext,
-                                       const std::string& associated_data); // Pass AD for verification
+  std::string AES_decrypt(const MessageKey &key,
+                          const CryptoPP::SecByteBlock &iv,
+                          const CryptoPP::SecByteBlock &ciphertext,
+                          const std::string& associated_data); // Pass AD for verification
 
   // HMAC Generation & Verification
   CryptoPP::SecByteBlock HMAC_generate(const MessageKey &key, // Use message key for MAC
