@@ -519,12 +519,11 @@ void Client::cli_loop() {
 void Client::network_loop() {
   CUSTOM_LOG(lg, trace) << "Starting Network loop.";
   while (running) {
-    std::string data;
-    bool received = network_driver->receive(data);
+    std::string data = chvec2str(network_driver->read());
 
     if (!running) break; // Check after blocking call
 
-    if (received && !data.empty()) {
+    if (data.length() > 0) {
         CUSTOM_LOG(lg, trace) << "Received raw data (" + std::to_string(data.length()) + " bytes): " + data;
          // Determine message type and deserialize (basic version)
          try {
@@ -564,10 +563,7 @@ void Client::network_loop() {
          } catch (const std::exception& e) {
              CUSTOM_LOG(lg, trace) << "Error deserializing or queuing received message: " + std::string(e.what());
          }
-    } else if (!received && network_driver->has_error()) {
-        CUSTOM_LOG(lg, trace) << "Network error occurred. Stopping.";
-        running = false; // Signal stop on network error
-    }
+    } 
 
     // Add a small sleep if receive is non-blocking or to reduce CPU usage
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -647,7 +643,7 @@ void Client::receive_loop() {
             // Decrypt using Double Ratchet
             std::string plaintext_opt = RatchetDecrypt(*dr_msg_ptr);
             CUSTOM_LOG(lg, trace) << "Decryption successful.";
-            cli_driver->display_message("<Peer>", plaintext_opt);
+            cli_driver->print_info("<Peer>" + plaintext_opt);
            
         } else {
              CUSTOM_LOG(lg, trace) << "Warning: Received non-MESSAGE type message in receive_loop after initialization. Discarding.";
@@ -660,7 +656,7 @@ void Client::receive_loop() {
    CUSTOM_LOG(lg, trace) << "Exiting Receive loop.";
 }
 
-void Client::run(bool is_initiator, const std::string& remote_addr) {
+void Client::run(bool is_initiator, std::string remote_addr) {
   running = true;
    CUSTOM_LOG(lg, trace) << "Client starting run...";
 
@@ -678,7 +674,7 @@ void Client::run(bool is_initiator, const std::string& remote_addr) {
 
   } catch (const std::exception& e) {
      CUSTOM_LOG(lg, trace) << "Error during initialization: " + std::string(e.what());
-    cli_driver->display_error("Initialization failed: " + std::string(e.what()));
+    cli_driver->print_warning("Initialization failed: " + std::string(e.what()));
     running = false; // Prevent threads from doing work if init failed
   }
 
@@ -705,7 +701,7 @@ void Client::stop() {
    CUSTOM_LOG(lg, trace) << "Signaled threads to stop. Joining threads...";
 
   // Optional: Add mechanisms to interrupt blocking calls in loops (e.g., close sockets)
-  network_driver->close_connection(); // Help network_loop unblock
+  network_driver->disconnect(); // Help network_loop unblock
   cli_driver->notify_shutdown(); // Help cli_loop unblock if needed
 
   // Join threads to ensure they exit cleanly
