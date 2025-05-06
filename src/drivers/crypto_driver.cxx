@@ -1,5 +1,7 @@
-#include "drivers/crypto_driver.hpp"
-#include "include-shared/util.hpp" // For print_bytes if needed
+#include "../../include/drivers/crypto_driver.hpp"
+#include "../../include-shared/util.hpp" // For print_bytes if needed
+#include "../../include-shared/messages.hpp" // Include for key type definitions
+
 
 #include <cryptopp/osrng.h>
 #include <cryptopp/secblock.h>
@@ -55,7 +57,7 @@ CryptoDriver::CryptoDriver() {
 // --- HKDF Implementation ---
 void CryptoDriver::HKDF(const CryptoPP::SecByteBlock& salt,
                         const CryptoPP::SecByteBlock& ikm,
-                        const CryptoPP::byte* info, size_t info_len,
+                        const CryptoPP::SecByteBlock& info, size_t info_len,
                         CryptoPP::SecByteBlock& derived_key1, size_t dk1_len,
                         CryptoPP::SecByteBlock& derived_key2, size_t dk2_len) {
     CryptoPP::HKDF<HASH> kdf;
@@ -65,7 +67,7 @@ void CryptoDriver::HKDF(const CryptoPP::SecByteBlock& salt,
     kdf.DeriveKey(derived_keys.BytePtr(), derived_keys.SizeInBytes(),
                   ikm.BytePtr(), ikm.SizeInBytes(),
                   salt.BytePtr(), salt.SizeInBytes(),
-                  info, info_len);
+                  info.BytePtr(), info_len);
 
     derived_key1.Assign(derived_keys.BytePtr(), dk1_len);
     if (dk2_len > 0) {
@@ -205,19 +207,21 @@ CryptoDriver::AES_encrypt(const MessageKey &key, const std::string &plaintext, c
 // TODO: instead of using optional, throw an error if decryption fails 
 
 // AES Decryption (Using CBC mode)
-std::optional<std::string> CryptoDriver::AES_decrypt(const MessageKey &key,
-                                       const CryptoPP::SecByteBlock &iv,
-                                       const CryptoPP::SecByteBlock &ciphertext,
-                                       const std::string& associated_data) {
+std::string CryptoDriver::AES_decrypt(const MessageKey &key,
+                                      const CryptoPP::SecByteBlock &iv,
+                                      const CryptoPP::SecByteBlock &ciphertext,
+                                      const std::string& associated_data) {
     // Ensure key is correct size
      if (key.size() != KEY_SIZE) {
         std::cerr << "AES decryption error: Incorrect key size." << std::endl;
-        return std::nullopt;
+        throw std::runtime_error("AES decryption error: Incorrect key size.");
+        return "";
     }
     // Ensure IV is correct size
      if (iv.size() != CryptoPP::AES::BLOCKSIZE) {
          std::cerr << "AES decryption error: Incorrect IV size." << std::endl;
-        return std::nullopt;
+        throw std::runtime_error("AES decryption error: Incorrect IV size.");
+         return "";
      }
 
     std::string recovered_plaintext;
@@ -234,7 +238,8 @@ std::optional<std::string> CryptoDriver::AES_decrypt(const MessageKey &key,
 
     } catch(const CryptoPP::Exception& e) {
         std::cerr << "AES decryption failed: " << e.what() << std::endl;
-        return std::nullopt; // Return empty optional on decryption failure
+        throw std::runtime_error("AES decryption failed: " + std::string(e.what()));
+        return ""; 
     }
 
     // IMPORTANT: MAC verification MUST happen *before* returning plaintext.
@@ -254,7 +259,7 @@ CryptoPP::SecByteBlock CryptoDriver::HMAC_generate(const MessageKey &key,
         HMAC_DR hmac(key.BytePtr(), key.size());
 
         // Hash(AD || IV || Ciphertext)
-        hmac.Update(reinterpret_cast<const CryptoPP::byte*>(associated_data.data()), associated_data.size());
+        hmac.Update(string_to_byteblock(associated_data).BytePtr(), associated_data.size());
         hmac.Update(iv.BytePtr(), iv.size());
         hmac.Update(ciphertext.BytePtr(), ciphertext.size());
 
@@ -277,7 +282,7 @@ bool CryptoDriver::HMAC_verify(const MessageKey &key,
         HMAC_DR hmac(key.BytePtr(), key.size());
 
          // Hash(AD || IV || Ciphertext) - must be identical to generation
-        hmac.Update(reinterpret_cast<const CryptoPP::byte*>(associated_data.data()), associated_data.size());
+        hmac.Update(string_to_byteblock(associated_data).BytePtr(), associated_data.size());
         hmac.Update(iv.BytePtr(), iv.size());
         hmac.Update(ciphertext.BytePtr(), ciphertext.size());
 

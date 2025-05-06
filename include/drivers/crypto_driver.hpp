@@ -19,12 +19,12 @@
 #include <string>
 #include <utility> // For std::pair
 
-#include "messages.hpp" // Include for key type definitions
+#include "../include-shared/messages.hpp" // Include for key type definitions
 
 // Define constants for KDF info fields (ensure they are distinct)
-const CryptoPP::byte KDF_RK_INFO[] = {0x01, 'R', 'K'}; // Example info for Root Key KDF
-const CryptoPP::byte KDF_CK_INFO[] = {0x02, 'C', 'K'}; // Example info for Chain Key KDF
-const CryptoPP::byte KDF_MK_INFO[] = {0x03, 'M', 'K'}; // Example info for Message Key KDF
+const CryptoPP::SecByteBlock KDF_RK_INFO = integer_to_byteblock(0x01); // 0x01 for RK
+const CryptoPP::SecByteBlock KDF_CK_INFO = integer_to_byteblock(0x02); // 0x02 for CK
+const CryptoPP::SecByteBlock KDF_MK_INFO = integer_to_byteblock(0x03); // 0x03 for MK
 
 // Using SHA256 for HMAC and HKDF typically
 using HASH = CryptoPP::SHA256;
@@ -46,7 +46,7 @@ public:
   // Helper for HKDF extraction and expansion
   void HKDF(const CryptoPP::SecByteBlock& salt,
             const CryptoPP::SecByteBlock& ikm, // Input Keying Material
-            const CryptoPP::byte* info, size_t info_len,
+            const CryptoPP::SecByteBlock& info, size_t info_len,
             CryptoPP::SecByteBlock& derived_key1, size_t dk1_len,
             CryptoPP::SecByteBlock& derived_key2, size_t dk2_len);
 
