@@ -156,7 +156,7 @@ CryptoPP::SecByteBlock CryptoDriver::AES_generate_key(const CryptoPP::SecByteBlo
     kdf.DeriveKey(aes_key.BytePtr(), aes_key.size(),
                   shared_secret.BytePtr(), shared_secret.size(),
                   nullptr, 0, // No salt
-                  (const CryptoPP::byte*)"AES Key", 7); // Simple info
+                  string_to_byteblock("AES Key").BytePtr(), 7); // Simple info
     return aes_key;
 }
 
@@ -167,7 +167,7 @@ CryptoPP::SecByteBlock CryptoDriver::HMAC_generate_key(const CryptoPP::SecByteBl
     kdf.DeriveKey(hmac_key.BytePtr(), hmac_key.size(),
                   shared_secret.BytePtr(), shared_secret.size(),
                   nullptr, 0, // No salt
-                  (const CryptoPP::byte*)"HMAC Key", 8); // Simple info
+                  string_to_byteblock("HMAC Key").BytePtr(), 8); // Simple info
     return hmac_key;
 }
 
