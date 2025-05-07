@@ -32,11 +32,11 @@
 *.app
 *.x
 
-# Build directory
-cmake-build-debug/
-build/*
-debug-build/*
-!build/test.sh
+# # Build directory
+# cmake-build-debug/
+# build/*
+# debug-build/*
+# !build/test.sh
 
 # TA Code
 src-ta/
