@@ -140,9 +140,17 @@ CryptoPP::SecByteBlock CryptoDriver::DH_generate_shared_secret(const CryptoPP::S
 DHPublicKey CryptoDriver::get_dh_public_key() const {
     // Ensure initialized
     if (dh_pub_key.empty()) {
-        throw std::runtime_error("DH keys not initialized");
+        throw std::runtime_error("DH keys not initialized, can't find public key");
     }
   return dh_pub_key;
+}
+
+CryptoPP::SecByteBlock CryptoDriver::get_dh_private_key() const {
+    // Ensure initialized
+    if (dh_priv_key.empty()) {
+        throw std::runtime_error("DH keys not initialized, can't find private key");
+    }
+  return dh_priv_key;
 }
 
 

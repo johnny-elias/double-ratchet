@@ -37,12 +37,17 @@ const unsigned int HASH_SIZE = HASH::DIGESTSIZE; // 32 bytes for SHA256
 
 
 class CryptoDriver {
-public: 
   CryptoPP::DH dh;
-  CryptoPP::AutoSeededRandomPool prng;
   CryptoPP::SecByteBlock dh_priv_key;
   CryptoPP::SecByteBlock dh_pub_key;
-  
+
+public:   
+  CryptoPP::AutoSeededRandomPool prng;
+  // --- Key Types ---
+  CryptoPP::SecByteBlock get_dh_private_key() const; // Get the *initial* identity private key
+  DHPublicKey get_dh_public_key() const; // Get the *initial* identity public key
+  // Note: Ratchet keys are managed within the Client state now
+
   // --- Key Derivation Function (HKDF based) ---
   // HKDF<HASH> kdf; // Can instantiate HKDF if needed directly
 
@@ -68,10 +73,6 @@ public:
   void DH_generate_ratchet_keypair(CryptoPP::SecByteBlock& priv_key, DHPublicKey& pub_key);
   CryptoPP::SecByteBlock DH_generate_shared_secret(const CryptoPP::SecByteBlock &priv_key,
                                                   const DHPublicKey &their_pub_key);
-
-  // Expose current public key
-  DHPublicKey get_dh_public_key() const; // Get the *initial* identity public key
-  // Note: Ratchet keys are managed within the Client state now
 
 
   // --- Symmetric Cryptography (Existing Methods - check if modifications needed) ---

@@ -68,6 +68,16 @@ void Client:: prepare_keys(bool is_initiator, std::string& remote_addr) {
                         key_msg.deserialize(msg_data);
                         CUSTOM_LOG(lg, trace) << "Received initial key exchange message from responder.";
                         HandleKeyExchange(key_msg); // Process Bob's initial key
+
+                        // Send back initiator's own key exchange
+                        Message_KeyExchange my_key_msg;
+                        my_key_msg.pub_val = my_initial_pub_key;
+                        my_key_msg.iv.New(CryptoPP::AES::BLOCKSIZE);
+                        crypto_driver->prng.GenerateBlock(my_key_msg.iv, my_key_msg.iv.size());
+
+                        std::vector<unsigned char> serialized_msg = str2chvec(prefix_message_type(my_key_msg));
+                        network_driver->send(serialized_msg);
+                        CUSTOM_LOG(lg, trace) << "Initiator sent KEY_EXCHANGE reply to responder.";
                     } else {
                         CUSTOM_LOG(lg, trace) << "Warning: Expected KeyExchange message first, received other type. Ignoring.";
                     }
@@ -124,27 +134,11 @@ void Client::HandleKeyExchange(const Message_KeyExchange &msg) {
 
     // Generate the initial shared secret using our *ratchet* private key and their public key
     // In this simplified setup, the initial DH key pair IS the first ratchet key pair
-    CryptoPP::SecByteBlock our_initial_priv_key; // Need to retrieve this... requires storing it
-    // FIXME: The initial DH key pair needs to be stored or regenerated consistently.
-    // Let's assume DH_initialize stores it in the CryptoDriver for now, and add a getter.
-    // ***** ADD a getter CryptoDriver::get_dh_private_key() ***** (Not shown in crypto_driver mods above)
-    // our_initial_priv_key = crypto_driver->get_dh_private_key(); // Needs implementation
+    CryptoPP::SecByteBlock our_initial_priv_key; 
+    our_initial_priv_key = crypto_driver->get_dh_private_key(); 
 
-    // TEMPORARY WORKAROUND: Regenerate the key pair to get the private key.
-    // THIS IS NOT SECURE OR CORRECT FOR REAL USE. The initial key pair MUST be persistent.
-    CUSTOM_LOG(lg, trace) << "WARNING: Regenerating initial key pair to get private key - Replace with proper key storage!";
-    CryptoPP::SecByteBlock temp_priv;
-    DHPublicKey temp_pub;
-    crypto_driver->DH_generate_ratchet_keypair(temp_priv, temp_pub); // Generate a temporary pair
-    // We *should* use the private key corresponding to the public key we *sent* or *would send*.
-    // This highlights the flaw in the simplified key exchange logic.
-
-    // Assuming we somehow have the correct initial private key 'our_initial_priv_key'
-    // initial_shared_secret = crypto_driver->DH_generate_shared_secret(our_initial_priv_key, initial_remote_pub_key);
-
-    // Given the flaw, let's just use the temporary one for demonstration, knowing it's wrong.
-    initial_shared_secret = crypto_driver->DH_generate_shared_secret(temp_priv, initial_remote_pub_key);
-
+    // Assuming we have the correct initial private key 'our_initial_priv_key'
+    initial_shared_secret = crypto_driver->DH_generate_shared_secret(our_initial_priv_key, initial_remote_pub_key);
 
     // CUSTOM_LOG(lg, trace) << "Calculated initial shared secret: " + byteblock_to_string(initial_shared_secret);
 
@@ -163,8 +157,8 @@ void Client::HandleKeyExchange(const Message_KeyExchange &msg) {
         CUSTOM_LOG(lg, trace) << "Initializing DR as Bob...";
         // Bob uses his initial key pair as the first ratchet key pair.
         // FIXME: Bob needs his initial private/public keys here. Use the temporary ones again...
-         DHs_priv = temp_priv;
-         DHs_pub = temp_pub;
+         DHs_priv = our_initial_priv_key;
+         DHs_pub = initial_remote_pub_key;
          RatchetInitBob(initial_shared_secret, DHs_priv, DHs_pub);
          // Bob sets DHr_pub when he receives Alice's first DR message.
     }
@@ -536,10 +530,10 @@ void Client::network_loop() {
                      CUSTOM_LOG(lg, trace) << "Received KEY_EXCHANGE message during setup phase.";
                      auto key_msg = std::make_unique<Message_KeyExchange>();
                      key_msg->deserialize(msg_data);
-                     // HandleKeyExchange *should* be called synchronously in prepare_keys now.
-                     // If it arrives asynchronously here, need careful state management.
-                     // For now, assume setup is synchronous and ignore async KEY_EXCHANGE.
-                      CUSTOM_LOG(lg, trace) << "Ignoring async KEY_EXCHANGE message.";
+
+                     HandleKeyExchange(*key_msg);
+
+                      CUSTOM_LOG(lg, trace) << "Responder: DR initialized from KEY_EXCHANGE.";
                  } else {
                       CUSTOM_LOG(lg, trace) << "Warning: Received unexpected KEY_EXCHANGE message after setup. Ignoring.";
                  }
