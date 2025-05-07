@@ -41,7 +41,8 @@ int main(int argc, char *argv[]) {
   std::shared_ptr<CryptoDriver> crypto_driver = std::make_shared<CryptoDriver>();
 
   // Create client then run network, crypto, and cli.
-  Client client = Client(network_driver, crypto_driver);
-  client.run(command);
+  Client client = Client(crypto_driver, network_driver);
+  bool is_initiator = (command == "connect");
+  client.run(is_initiator, address);
   return 0;
 }

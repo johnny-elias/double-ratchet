@@ -17,7 +17,6 @@
 #include "../../include/drivers/crypto_driver.hpp"
 #include "../../include/drivers/network_driver.hpp"
 
-#include "../../include-shared/constants.hpp"
 #include "../../include-shared/logger.hpp"
 #include "../../include-shared/messages.hpp"
 
@@ -61,6 +60,8 @@ private:
   std::mutex send_queue_mtx;
   std::queue<std::unique_ptr<Message>> receive_queue;
   std::mutex receive_queue_mtx;
+
+  bool is_initiator_ = false;
 
 
   // --- Double Ratchet State ---

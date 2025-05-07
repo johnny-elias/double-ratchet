@@ -11,7 +11,11 @@
 /**
  * Constructor.
  */
-CLIDriver::CLIDriver() {}
+CLIDriver::CLIDriver() {
+  std::string read_input();
+
+  void notify_shutdown();
+}
 
 /**
  * Starts up the CLI.

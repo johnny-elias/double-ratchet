@@ -12,6 +12,7 @@
 #include <cryptopp/osrng.h>
 #include <cryptopp/sha.h>
 #include <cryptopp/aes.h>
+#include "../include-shared/util.hpp"   // for integer_to_byteblock
 
 
 #include <optional>
@@ -25,6 +26,8 @@
 const CryptoPP::SecByteBlock KDF_RK_INFO = integer_to_byteblock(0x01); // 0x01 for RK
 const CryptoPP::SecByteBlock KDF_CK_INFO = integer_to_byteblock(0x02); // 0x02 for CK
 const CryptoPP::SecByteBlock KDF_MK_INFO = integer_to_byteblock(0x03); // 0x03 for MK
+
+static constexpr int DEFAULT_SERVER_PORT = 3000;
 
 // Using SHA256 for HMAC and HKDF typically
 using HASH = CryptoPP::SHA256;

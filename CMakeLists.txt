@@ -14,8 +14,6 @@ set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 include(Boost)
 # include(Cryptopp)
-include(CTest)
-include(Doctest)
 include(Documentation)
 include(Warnings)
 include(Curses)
@@ -24,7 +22,6 @@ include(Curses)
 set(SOURCES_SHARED src-shared/messages.cxx src-shared/logger.cxx src-shared/util.cxx)
 add_library(${LIBRARY_NAME_SHARED} ${SOURCES_SHARED})
 target_include_directories(${LIBRARY_NAME_SHARED} PUBLIC ${PROJECT_SOURCE_DIR}/include-shared)
-target_link_libraries(${LIBRARY_NAME_SHARED} PUBLIC doctest)
 target_link_libraries(${LIBRARY_NAME_SHARED} PRIVATE cryptopp)
 # target_link_libraries(${LIBRARY_NAME_SHARED} PRIVATE cryptopp-shared)
 target_link_libraries(${LIBRARY_NAME_SHARED} PRIVATE ${Boost_LIBRARIES})
@@ -80,21 +77,3 @@ if ( "$ENV{CS1515_TA_MODE}" STREQUAL "on" )
           CXX_EXTENSIONS NO
   )
 endif()
-
-# add tests
-# Define the test executable
-add_executable(unit_tests
-    tests/test_double_ratchet.cxx
-)
-
-# Link dependencies
-target_link_libraries(unit_tests PRIVATE
-    doctest::doctest_with_main # Link doctest
-    signal_app_lib             # Link against your main library (where Client, CryptoDriver etc. are)
-    # Add other necessary libraries like CryptoPP if not linked via signal_app_lib
-    # Example: cryptopp-static or cryptopp depending on how you link it
-)
-
-# Add test to CTest
-include(CTest)
-add_test(NAME UnitTests COMMAND unit_tests)

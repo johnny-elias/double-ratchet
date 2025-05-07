@@ -1,6 +1,5 @@
 #include "../../include/pkg/client.hpp"
 #include "../../include-shared/util.hpp" // For print_bytes etc.
-#include "../../include-shared/constants.hpp"
 #include "../../include-shared/logger.hpp"
 
 #include <chrono> // For sleep_for
@@ -54,14 +53,16 @@ void Client:: prepare_keys(bool is_initiator, std::string& remote_addr) {
         // This loop assumes the first message received *must* be a KeyExchange
         // In a real scenario, might need more robust handshake logic.
         while (!initial_key_exchanged && running) {
-             std::string data;
-             std::vector<unsigned char> data = this->network_driver->read();
+             std::string buf;
+             auto data = this->network_driver->read();
              if (data.size() > 0) {
                  try {
                     // Assume type byte prefix is used
                     if (data.empty()) continue;
                     MessageType type = static_cast<MessageType>(data[0]);
-                    std::string msg_data = data.substr(1);
+
+                    // build msg_data from bytes 1..end
+                    std::string msg_data(data.begin() + 1, data.end());
 
                     if (type == MessageType::KEY_EXCHANGE) {
                         Message_KeyExchange key_msg;
@@ -89,9 +90,7 @@ void Client:: prepare_keys(bool is_initiator, std::string& remote_addr) {
 
         // Responder (Bob) sends his initial public key immediately upon connection
         // This assumes the initiator connects promptly.
-        while (!network_driver->has_client() && running) {
-             std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Wait for connection
-        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Wait for connection
         if (!running) return; // Exit if stopped during wait
 
         Message_KeyExchange key_msg;
@@ -156,7 +155,7 @@ void Client::HandleKeyExchange(const Message_KeyExchange &msg) {
     // This logic depends on who initiates DR. Let's assume the 'is_initiator' flag determines Alice/Bob role FOR DR.
     // In the simplified setup, the client role (initiator/responder) aligns with DR Alice/Bob.
 
-    if (network_driver->is_initiator()) { // Client is Initiator -> Acts as DR Alice
+    if (is_initiator_) { // Client is Initiator -> Acts as DR Alice
         CUSTOM_LOG(lg, trace) << "Initializing DR as Alice...";
         // Alice needs Bob's initial public key (which we just received)
         // Alice generates her first ratchet key pair NOW.
@@ -657,6 +656,7 @@ void Client::receive_loop() {
 }
 
 void Client::run(bool is_initiator, std::string remote_addr) {
+    is_initiator_ = is_initiator;
   running = true;
    CUSTOM_LOG(lg, trace) << "Client starting run...";
 

@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <string>
 #include <sys/ioctl.h>
+#include <atomic>
+#include <iostream>
 
 class CLIDriver {
 public:
@@ -17,4 +19,18 @@ public:
 
 private:
   struct winsize size;
+
+private:
+  std::atomic<bool> shutting_down = false;
+public:
+  std::string read_input() {
+    std::string line;
+    std::getline(std::cin, line);
+    if (shutting_down) return "";
+    return line;
+  }
+  void notify_shutdown() {
+    shutting_down = true;
+    std::cin.setstate(std::ios::eofbit);   // force getline to return
+  }
 };

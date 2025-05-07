@@ -191,7 +191,7 @@ CryptoDriver::AES_encrypt(const MessageKey &key, const std::string &plaintext, c
         // Use StringSource and StreamTransformationFilter for padding
         CryptoPP::StringSource ss(plaintext, true,
             new CryptoPP::StreamTransformationFilter(encryptor,
-                new CryptoPP::SecByteBlockSink(ciphertext)
+               new CryptoPP::ArraySink(ciphertext.BytePtr(), ciphertext.SizeInBytes())
             ) // StreamTransformationFilter
         ); // StringSource
     } catch(const CryptoPP::Exception& e) {
@@ -230,11 +230,11 @@ std::string CryptoDriver::AES_decrypt(const MessageKey &key,
         decryptor.SetKeyWithIV(key, key.size(), iv, iv.size());
 
         // Use SecByteBlockSource and StreamTransformationFilter
-         CryptoPP::SecByteBlockSource ss(ciphertext, true,
+        CryptoPP::ArraySource ss(ciphertext.BytePtr(), ciphertext.SizeInBytes(), true,
             new CryptoPP::StreamTransformationFilter(decryptor,
                 new CryptoPP::StringSink(recovered_plaintext)
-            ) // StreamTransformationFilter
-        ); // SecByteBlockSource
+            )  // StreamTransformationFilter
+        );
 
     } catch(const CryptoPP::Exception& e) {
         std::cerr << "AES decryption failed: " << e.what() << std::endl;
