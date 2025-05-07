@@ -47,7 +47,6 @@ void Client:: prepare_keys(bool is_initiator, std::string& remote_addr) {
 
     if (is_initiator) {
         CUSTOM_LOG(lg, trace) << "Running as initiator. Waiting for connection and remote key...";
-        network_driver->connect(remote_addr, DEFAULT_SERVER_PORT); // TODO: configure port, type int 
 
         // Initiator (Alice) waits for Bob's initial key exchange message
         // This loop assumes the first message received *must* be a KeyExchange
@@ -86,7 +85,6 @@ void Client:: prepare_keys(bool is_initiator, std::string& remote_addr) {
 
     } else {
         CUSTOM_LOG(lg, trace) << "Running as responder. Starting listener and sending initial key...";
-        network_driver->listen(DEFAULT_SERVER_PORT); // Start listening
 
         // Responder (Bob) sends his initial public key immediately upon connection
         // This assumes the initiator connects promptly.

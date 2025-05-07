@@ -12,7 +12,6 @@ Possible severity levels (defined in trivial.hpp):
     error
     fatal
 */
-
 #pragma once
 
 #include <string>
