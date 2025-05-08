@@ -182,37 +182,35 @@ CryptoPP::SecByteBlock CryptoDriver::HMAC_generate_key(const CryptoPP::SecByteBl
 
 // AES Encryption (Using CBC mode as per original code - Ensure AD is used in MAC!)
 std::pair<CryptoPP::SecByteBlock, CryptoPP::SecByteBlock>
-CryptoDriver::AES_encrypt(const MessageKey &key, const std::string &plaintext, const std::string& associated_data) {
-    // Ensure key is correct size
-    if (key.size() != KEY_SIZE) {
+CryptoDriver::AES_encrypt(const MessageKey &key,
+                          const std::string &plaintext,
+                          const std::string &associated_data){
+    if (key.size() != KEY_SIZE)
         throw std::runtime_error("AES encryption error: Incorrect key size.");
-    }
 
-    CryptoPP::SecByteBlock iv(CryptoPP::AES::BLOCKSIZE); // 16 bytes IV for AES
+    // 1) Generate a fresh IV
+    CryptoPP::SecByteBlock iv(CryptoPP::AES::BLOCKSIZE);
     prng.GenerateBlock(iv, iv.size());
 
-    CryptoPP::SecByteBlock ciphertext;
-    try {
-        CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption encryptor;
-        encryptor.SetKeyWithIV(key, key.size(), iv, iv.size());
+    // 2) Encrypt into a std::string
+    std::string ct_str;
+    CryptoPP::CBC_Mode<CryptoPP::AES>::Encryption encryptor;
+    encryptor.SetKeyWithIV(key, key.size(), iv, iv.size());
+    CryptoPP::StringSource ss(
+      plaintext, true,
+      new CryptoPP::StreamTransformationFilter(
+        encryptor,
+        new CryptoPP::StringSink(ct_str)
+      )
+    );
 
-        // Use StringSource and StreamTransformationFilter for padding
-        CryptoPP::StringSource ss(plaintext, true,
-            new CryptoPP::StreamTransformationFilter(encryptor,
-               new CryptoPP::ArraySink(ciphertext.BytePtr(), ciphertext.SizeInBytes())
-            ) // StreamTransformationFilter
-        ); // StringSource
-    } catch(const CryptoPP::Exception& e) {
-        throw std::runtime_error("AES encryption failed: " + std::string(e.what()));
-    }
-
-    // IMPORTANT: The MAC must cover the IV, Ciphertext, AND Associated Data (header)
-    // The HMAC generation function should handle this.
-
-    return {iv, ciphertext};
+    // 3) Move it into a SecByteBlock
+    CryptoPP::SecByteBlock ciphertext(
+      reinterpret_cast<const byte*>(ct_str.data()),
+      ct_str.size()
+    );
+    return { iv, ciphertext };
 }
-
-// TODO: instead of using optional, throw an error if decryption fails 
 
 // AES Decryption (Using CBC mode)
 std::string CryptoDriver::AES_decrypt(const MessageKey &key,

@@ -1,6 +1,10 @@
 #ifndef __MESSAGES_HPP__
 #define __MESSAGES_HPP__
 
+#include <sstream>
+#include <iomanip>
+#include <arpa/inet.h>
+
 // #include <cstdint>
 // #include <cstring> // For memcpy
 // #include <iostream>
@@ -45,50 +49,44 @@ struct DoubleRatchetHeader {
 
     DoubleRatchetHeader() : pn(0), n(0) {} // Default constructor
 
-    // Basic serialization (example - needs robust implementation)
     std::string serialize() const {
-        std::string s;
-        // Size of pub key + pub key bytes + sizeof(pn) + pn bytes + sizeof(n) + n bytes
-        uint32_t pub_key_size = dh_pub.size(); 
-        s.append(reinterpret_cast<const char*>(&pub_key_size), sizeof(pub_key_size));
-        s.append(reinterpret_cast<const char*>(dh_pub.BytePtr()), pub_key_size);
-
-        s.append(reinterpret_cast<const char*>(&pn), sizeof(pn));
-
-        s.append(reinterpret_cast<const char*>(&n), sizeof(n));
-        return s;
+      std::string out;
+      auto write_be32 = [&](uint32_t x){
+          uint32_t y = htonl(x);
+          out.append(reinterpret_cast<const char*>(&y), sizeof(y));
+      };
+      write_be32(dh_pub.size());
+      out.append(reinterpret_cast<const char*>(dh_pub.BytePtr()), dh_pub.size());
+      write_be32(pn);
+      write_be32(n);
+      return out;
     }
 
-    // Basic deserialization (example - needs robust implementation)
+    std::string serialize_hex() const {
+      std::ostringstream oss;
+      auto bin = serialize();
+      for (unsigned char c : bin)
+          oss << std::hex << std::setw(2) << std::setfill('0')
+              << static_cast<int>(c);
+      return oss.str();
+    }
+
     // Returns the number of bytes consumed, or 0 on error.
-    size_t deserialize(const std::string& data) {
-        size_t offset = 0;
-
-        // Read pub key size
-        if (data.size() < offset + sizeof(uint32_t)) return 0;
-        uint32_t pub_key_size;
-        std::memcpy(&pub_key_size, data.data() + offset, sizeof(pub_key_size));
-        offset += sizeof(pub_key_size);
-
-        // Read pub key bytes
-        if (data.size() < offset + pub_key_size) return 0;
-        // Use global namespace 'byte' type defined by CryptoPP's config.h
-        dh_pub.Assign(reinterpret_cast<const byte*>(data.data() + offset), pub_key_size);
-        offset += pub_key_size;
-
-        // Read PN
-        if (data.size() < offset + sizeof(uint32_t)) return 0;
-        uint32_t pn;
-        std::memcpy(&pn, data.data() + offset, sizeof(pn));
-        offset += sizeof(pn);
-
-        // Read N
-        if (data.size() < offset + sizeof(uint32_t)) return 0;
-        uint32_t n;
-        std::memcpy(&n, data.data() + offset, sizeof(n));
-        offset += sizeof(n);
-
-        return offset; // Return bytes consumed
+    size_t deserialize(const std::string &data) {
+      size_t off = 0, len = data.size();
+      if (len < off + 4) throw std::runtime_error("hdr: size");
+      uint32_t s; std::memcpy(&s, data.data()+off,4); s = ntohl(s);
+      off += 4;
+      if (len < off + s) throw std::runtime_error("hdr: key");
+      dh_pub.Assign((const byte*)data.data()+off, s);
+      off += s;
+      auto read_be32 = [&](uint32_t &x){
+          uint32_t t; std::memcpy(&t, data.data()+off,4);
+          x = ntohl(t); off += 4;
+      };
+      read_be32(pn);
+      read_be32(n);
+      return off;
     }
 
      // For using DHPublicKey in std::map keys (like SkippedMessageKeyId)
@@ -279,8 +277,13 @@ struct Message_Message : public Message {
   }
 
   // Helper to get the serialized header bytes, useful for Associated Data (AD)
-  std::string get_serialized_header() const {
-      return header.serialize();
+  std::string get_serialized_header(bool hex) const {
+      if (hex) {
+          return header.serialize_hex();
+      } else {
+          // Return the raw serialized header bytes
+          return header.serialize();
+      }
   }
 };
 
