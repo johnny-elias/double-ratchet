@@ -66,6 +66,7 @@ private:
 
   // --- Double Ratchet State ---
   bool dr_initialized; // Flag to check if DR state is ready
+  bool first_dr_message_received; // Flag to check if first message is sent
   RootKey RK;          // Root Key
   ChainKey CKs;        // Sending Chain Key
   ChainKey CKr;        // Receiving Chain Key

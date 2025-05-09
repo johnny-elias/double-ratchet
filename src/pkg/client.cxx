@@ -159,7 +159,7 @@ void Client::HandleKeyExchange(const Message_KeyExchange &msg) {
         // Bob uses his initial key pair as the first ratchet key pair.
         // FIXME: Bob needs his initial private/public keys here. Use the temporary ones again...
          DHs_priv = our_initial_priv_key;
-         DHs_pub = initial_remote_pub_key;
+         DHs_pub = crypto_driver->get_dh_public_key(); // This is Bob's first ratchet key pair
          RatchetInitBob(initial_shared_secret, DHs_priv, DHs_pub);
          // Bob sets DHr_pub when he receives Alice's first DR message.
     }
@@ -322,6 +322,7 @@ std::string Client::RatchetDecrypt(const Message_Message& msg) {
         // Decrypt
         std::string plaintext = crypto_driver->AES_decrypt(MK, msg.iv, msg.ciphertext, associated_data);
         CUSTOM_LOG(lg, trace) << "Decryption successful for skipped message.";
+        first_dr_message_received = true; // Mark first message received
         return plaintext;
     }
      CUSTOM_LOG(lg, trace) << "Message key not found in MKskipped.";
@@ -427,6 +428,7 @@ std::string Client::RatchetDecrypt(const Message_Message& msg) {
             // Decrypt
             auto plaintext = crypto_driver->AES_decrypt(MK, msg.iv, msg.ciphertext, associated_data);
             CUSTOM_LOG(lg, trace) << "Decryption successful for message N=" + std::to_string(msg.header.n);
+            first_dr_message_received = true; // Mark first message received
             return plaintext;
         } catch (const std::exception& e) {
             CUSTOM_LOG(lg, trace) << "Error during final KDF_CK or Decrypt/Verify for N=" + std::to_string(msg.header.n) + ": " + std::string(e.what());
@@ -602,6 +604,13 @@ void Client::network_loop() {
 void Client::send_loop() {
    CUSTOM_LOG(lg, trace) << "Starting Send loop.";
   while (running) {
+    if (!is_initiator_ && !first_dr_message_received) {
+        // If not initiator, wait for the first message to be sent
+        // Bob must wait to see Alice's first ratchet MESSAGE before sending his own
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        continue; // Skip sending until we are the initiator
+    }
+
     std::string plaintext_to_send;
     bool message_found = false;
 
@@ -675,7 +684,7 @@ void Client::receive_loop() {
                  continue; // Skip processing if decryption failed
             } else {
                 CUSTOM_LOG(lg, trace) << "Decryption successful.";
-                cli_driver->print_info("<Peer>" + plaintext_opt);
+                cli_driver->print_info("<Decrypted message>" + plaintext_opt);
             }
         } else {
              cli_driver->print_warning("Warning: Received non-MESSAGE type message in receive_loop after initialization. Discarding.");
